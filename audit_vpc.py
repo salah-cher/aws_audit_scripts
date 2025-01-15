@@ -153,6 +153,24 @@ def eval_igw(vpc_id):
 
     return igw_attached, route_to_igw
 
+def eval_subnet_type(subnet):
+    # Evaluates the type of subnet (public or private) based on its route table configuration
+    subnet_id = subnet['SubnetId']
+    
+    route_tables = ec2.describe_route_tables(Filters=[
+        {
+            'Name': 'association.subnet-id',
+            'Values': [subnet_id]
+        }
+    ])
+    
+    for route_table in route_tables['RouteTables']:
+        for route in route_table['Routes']:
+            if route.get('GatewayId') and route['GatewayId'].startswith('igw-'):
+                return "Public"
+    
+    return "Private"
+
 def populate_report(vpc_subnet_dict):
     report_lines = []
 
@@ -170,9 +188,11 @@ def populate_report(vpc_subnet_dict):
         for subnet in vpc:
             auto_public_ip = eval_auto_assign_public_subnets(subnet)
             subnet_id = subnet['SubnetId']
+            subnet_type = eval_subnet_type(subnet)
 
             report_lines.append(f"  Subnet ID: {subnet_id}")
             report_lines.append(f"      Subnet Assigns Public IP: {auto_public_ip}")
+            report_lines.append(f"      Subnet Type: {subnet_type}")
 
     return "\n".join(report_lines)
 
