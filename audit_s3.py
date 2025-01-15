@@ -69,14 +69,14 @@ def get_block_public_access_rules(bucket):
         values = block.values()
 
         if all(values) == True:
-            return "Public Access Block is fully enabled"
+            return "Enabled"
         elif any(result == True for result in values):
-            return "Public Access Block is partially enabled"
+            return "Partially Enabled"
         else:
-            return "No Public Access Block enabled"
+            return "Not Enabled"
     except ClientError as error:
         if error.response['Error']['Code'] == 'NoSuchPublicAccessBlockConfiguration':
-            return "No public access block configuration"
+            return "Not Configured"
         handle_client_error(error)
 
 def get_bucket_policy(bucket):
@@ -84,7 +84,7 @@ def get_bucket_policy(bucket):
     try:
         response = s3.get_bucket_policy_status(Bucket=bucket)
         policy_status = response['PolicyStatus']['IsPublic']
-        return "Public Policy" if policy_status else "Private Policy"
+        return "Public" if policy_status else "Private"
     except ClientError as policy_error:
         if policy_error.response['Error']['Code'] == 'NoSuchBucketPolicy':
             return "No bucket policy"
@@ -99,10 +99,10 @@ def get_bucket_acl(bucket):
         for entry in bucket_acl:
             try:
                 if entry['Grantee']['URI'] == 'http://acs.amazonaws.com/groups/global/AllUsers':
-                    return "Public ACL"
+                    return "Public"
             except KeyError:
                 continue
-        return "Private ACL"
+        return "Private"
     except ClientError as error:
         handle_client_error(error)
 
@@ -111,12 +111,68 @@ def get_s3_bucket_encryption(bucket):
     try:
         encryption = s3.get_bucket_encryption(Bucket=bucket)
         if 'ServerSideEncryptionConfiguration' in encryption:
-            return "Encrypted"
+            return "Enabled"
         else:
-            return "Not Encrypted"
+            return "Not Enabled"
     except ClientError as error:
         if error.response['Error']['Code'] == 'ServerSideEncryptionConfigurationNotFoundError':
-            return "Not Encrypted"
+            return "Not Enabled"
+        handle_client_error(error)
+
+def get_versioning(bucket):
+    """Check if bucket versioning is enabled."""
+    try:
+        versioning = s3.get_bucket_versioning(Bucket=bucket)
+        status = versioning.get('Status', 'Suspended')
+        return status if status != 'Suspended' else "Not Enabled"
+    except ClientError as error:
+        handle_client_error(error)
+
+def get_logging(bucket):
+    """Check if logging is enabled for the bucket."""
+    try:
+        logging = s3.get_bucket_logging(Bucket=bucket)
+        if logging.get('LoggingEnabled'):
+            return "Enabled"
+        else:
+            return "Not Enabled"
+    except ClientError as error:
+        handle_client_error(error)
+
+def get_lifecycle(bucket):
+    """Check if lifecycle policies are configured."""
+    try:
+        lifecycle = s3.get_bucket_lifecycle_configuration(Bucket=bucket)
+        if 'Rules' in lifecycle and lifecycle['Rules']:
+            return "Configured"
+        else:
+            return "Not Configured"
+    except ClientError as error:
+        if error.response['Error']['Code'] == 'NoSuchLifecycleConfiguration':
+            return "Not Configured"
+        handle_client_error(error)
+
+def get_website_configuration(bucket):
+    """Check if website hosting is enabled."""
+    try:
+        website = s3.get_bucket_website(Bucket=bucket)
+        return "Enabled"
+    except ClientError as error:
+        if error.response['Error']['Code'] == 'NoSuchWebsiteConfiguration':
+            return "Not Enabled"
+        handle_client_error(error)
+
+def get_cors_configuration(bucket):
+    """Check if CORS is configured for the bucket."""
+    try:
+        cors = s3.get_bucket_cors(Bucket=bucket)
+        if cors.get('CORSRules'):
+            return "Configured"
+        else:
+            return "Not Configured"
+    except ClientError as error:
+        if error.response['Error']['Code'] == 'NoSuchCORSConfiguration':
+            return "Not Configured"
         handle_client_error(error)
 
 def identify_public_buckets(all_buckets):
@@ -128,12 +184,22 @@ def identify_public_buckets(all_buckets):
         bucket_policy = get_bucket_policy(bucket)
         bucket_acl = get_bucket_acl(bucket)
         encryption = get_s3_bucket_encryption(bucket)
+        versioning = get_versioning(bucket)
+        logging = get_logging(bucket)
+        lifecycle = get_lifecycle(bucket)
+        website = get_website_configuration(bucket)
+        cors = get_cors_configuration(bucket)
 
         result_output.append(f"\nBucket Name: {bucket}")
         result_output.append(f"Public Block Enabled: {public_block}")
-        result_output.append(f"Bucket Policy Status: {bucket_policy}")
-        result_output.append(f"Bucket ACL Status: {bucket_acl}")
-        result_output.append(f"Bucket Encryption: {encryption}")
+        result_output.append(f"Bucket Policy Public: {bucket_policy}")
+        result_output.append(f"Bucket ACL Public: {bucket_acl}")
+        result_output.append(f"Default Encryption: {encryption}")
+        result_output.append(f"Versioning: {versioning}")
+        result_output.append(f"Logging: {logging}")
+        result_output.append(f"Lifecycle Policies: {lifecycle}")
+        result_output.append(f"Website Hosting: {website}")
+        result_output.append(f"CORS Configuration: {cors}")
         result_output.append("-" * 60)
 
     return "\n".join(result_output)
