@@ -1,163 +1,117 @@
 # Import required libraries
 import argparse
-import pandas
-import modules.build_client as bc
+import pandas as pd
+from modules.build_client import build_client
 from botocore.exceptions import ClientError
+import os
+from datetime import datetime
 
 # Create argparse object and arguments
 parser = argparse.ArgumentParser(description='Check for public S3 buckets in your AWS account.')
-parser.add_argument('-r', '--region', action='store', type=str,
-                    help='The region to evaluate S3 resources for. If not set, uses the default region specified in your profile.',
-                    required=False, default=None)
-parser.add_argument('-p', '--profile', action='store',
-                    help='AWS credential profile to run the script under. Automatically uses "default" if no profile is specified.',
-                    required=False, default='default')
-parser.add_argument('-b', '--bucket', action='append',
-                    help='The single bucket to evaluate. If no bucket is specified, automatically evaluates all buckets in the account.',
-                    required=False)
-
+parser.add_argument('-r', '--region', type=str, required=False, default=None,
+                    help='The region to evaluate S3 resources for. Defaults to the region in your AWS profile.')
+parser.add_argument('-p', '--profile', type=str, required=False, default='default',
+                    help='AWS credential profile. Defaults to "default".')
+parser.add_argument('-b', '--bucket', type=str, action='append', required=False,
+                    help='Specify a single bucket to evaluate. Defaults to evaluating all buckets.')
 args = parser.parse_args()
 
-# Create required S3 clients
-service = 's3'
-s3 = bc.build_client(args.profile, service, args.region)
+# Initialize S3 client
+s3 = build_client(args.profile, 's3', args.region)
 
-
-# Begin defining functions
+# Functions
 def get_s3_buckets():
-    # Gathers names of all S3 buckets in the account which access keys are configured for
-    bucket_names = []
-
-    # Gather list of buckets to either compare args to or return
+    """Fetch the list of all S3 buckets in the account."""
     try:
-        buckets = s3.list_buckets()
+        response = s3.list_buckets()
+        return [bucket['Name'] for bucket in response['Buckets']]
     except ClientError as error:
-        error = error.response['Error']['Code']
-        if error == 'InvalidClientTokenId':
-            print("Error: Invalid Client Token ID. Validate that the token is valid.")
-            exit(1)
-        elif error == 'AccessDenied' or error == 'UnauthorizedOperation':
-            print("Error: Access Denied. See README.md for IAM permissions required to execute this script.")
-            exit(2)
-
-    # Remove unnecessary keys from variable
-    buckets = buckets['Buckets']
-
-    # Loop through variable and create a list of names only
-    for name in buckets:
-        bucket_names.append(name['Name'])
-
-    # If no buckets are specified, simply return gathered bucket names
-    if args.bucket is None:
-        print('No bucket specified; evaluating all buckets in the account.')
-        return bucket_names
-
-    # If buckets are specified, check that bucket exists and exit if not
-    elif args.bucket:
-        # Get string of bucket name specified in cmd line argument
-        bucket_specified = args.bucket[0]  # This only works while only one argument is passed in
-
-        if bucket_specified in bucket_names:
-            return args.bucket
-        elif bucket_specified not in bucket_names:
-            print('ERROR: Specified bucket does not exist in the current AWS account.')
-            exit(3)
-
+        handle_client_error(error)
 
 def get_block_public_access_rules(bucket):
-    # Checks for public access block rules for all discovered buckets
-    public_block_results = []
-
+    """Check public access block rules for a specific bucket."""
     try:
-        block = s3.get_public_access_block(Bucket=bucket)
-        block = block['PublicAccessBlockConfiguration']
-        values = block.values()
-
-        # The all() function validates whether all values are True
-        if all(values) == True:
-            public = True
-
-        # any() function returns True if any item in an iterable is True
-        elif any(result == True for result in values):
-            public = "Partially Blocked"
-
-        # When someone manually specifies no public access block, this will catch it and still list it as False
-        else:
-            public = False
-
-    # Check for non-existent public access block configuration and specify if nothing is set
+        response = s3.get_public_access_block(Bucket=bucket)
+        config = response['PublicAccessBlockConfiguration']
+        return "Enabled" if all(config.values()) else "Partially Enabled" if any(config.values()) else "Disabled"
     except ClientError as error:
-        error = error.response['Error']['Code']
-        if error == 'NoSuchPublicAccessBlockConfiguration':
-            public = "Validate manually - no configuration set"
-
-    finally:
-        public_block_results = public
-
-    return public_block_results
-
+        if error.response['Error']['Code'] == 'NoSuchPublicAccessBlockConfiguration':
+            return "No Configuration"
+        handle_client_error(error)
 
 def get_bucket_policy(bucket):
-    # Checks for bucket policies that make the bucket public
+    """Check if the bucket policy makes it public."""
     try:
-        bucket_policy_results = s3.get_bucket_policy_status(Bucket=bucket)
-        bucket_policy_results = bucket_policy_results['PolicyStatus']['IsPublic']
-
-    # Checks for non-existent bucket policy and sets result to False
-    except ClientError as policy_error:
-        if policy_error.response['Error']['Code'] == 'NoSuchBucketPolicy':
-            bucket_policy_results = False
-
-    return bucket_policy_results
-
+        response = s3.get_bucket_policy_status(Bucket=bucket)
+        return "Public" if response['PolicyStatus']['IsPublic'] else "Private"
+    except ClientError as error:
+        if error.response['Error']['Code'] == 'NoSuchBucketPolicy':
+            return "No Policy"
+        handle_client_error(error)
 
 def get_bucket_acl(bucket):
-    # Checks for bucket ACLs that make the bucket public
-    bucket_acl_results = []
+    """Check if the bucket ACL grants public access."""
+    try:
+        response = s3.get_bucket_acl(Bucket=bucket)
+        for grant in response['Grants']:
+            if grant.get('Grantee', {}).get('URI') == 'http://acs.amazonaws.com/groups/global/AllUsers':
+                return "Public"
+        return "Private"
+    except ClientError as error:
+        handle_client_error(error)
 
-    # Bucket variable gets passed in from loop in identify_public_buckets()
-    bucket_acl = s3.get_bucket_acl(Bucket=bucket)
+def handle_client_error(error):
+    """Handle AWS ClientError exceptions."""
+    error_code = error.response['Error']['Code']
+    if error_code in ['AccessDenied', 'UnauthorizedOperation']:
+        print(f"Access Denied: {error_code}. Check IAM permissions.")
+        exit(1)
+    print(f"Unexpected error: {error_code}")
+    exit(1)
 
-    # Remove unnecessary keys from variable
-    bucket_acl = bucket_acl['Grants']
-
-    # Index allows us to loop through each ACL entry, since each bucket can have more than one
-    # Just realized on review that this is probably only returning last evaluated ACL rule, meaning this could return invalid results
-    for index, entry in enumerate(bucket_acl):
-        try:
-            if bucket_acl[index]['Grantee']['URI'] == 'http://acs.amazonaws.com/groups/global/AllUsers':
-                bucket_acl_results = True
-        except KeyError:
-            bucket_acl_results = False
-
-    return bucket_acl_results
-
-
-def identify_public_buckets(all_buckets):
-    # Creates dataframe that will be used to generate CSV report and validates which parts of bucket permissions are public, if any
-    columns = ['Bucket Name', 'Public Block Enabled', 'Bucket Policy Public', 'Bucket ACL Public']
-    bucket_df = pandas.DataFrame(columns=list(columns))
-
-    for bucket in all_buckets:
-        # Populate variables needed to do analysis
+def identify_public_buckets(buckets):
+    """Evaluate buckets for public access vulnerabilities."""
+    results = []
+    for bucket in buckets:
         public_block = get_block_public_access_rules(bucket)
         bucket_policy = get_bucket_policy(bucket)
         bucket_acl = get_bucket_acl(bucket)
+        results.append({
+            "Bucket Name": bucket,
+            "Public Block Enabled": public_block,
+            "Bucket Policy Public": bucket_policy,
+            "Bucket ACL Public": bucket_acl
+        })
+    return results
 
-        # Create dataframe structures to be converted into CSV
-        append_series = pandas.Series([bucket, public_block, bucket_policy, bucket_acl], index=columns)
-        bucket_df = bucket_df.append(append_series, ignore_index=True)
+def save_report(results, output_path):
+    """Save the results as a timestamped text report."""
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, 'w') as report_file:
+        for result in results:
+            report_file.write(f"Bucket Name: {result['Bucket Name']}\n")
+            report_file.write(f"  Public Block Enabled: {result['Public Block Enabled']}\n")
+            report_file.write(f"  Bucket Policy Public: {result['Bucket Policy Public']}\n")
+            report_file.write(f"  Bucket ACL Public: {result['Bucket ACL Public']}\n")
+            report_file.write("\n")
+    print(f"Report saved to: {output_path}")
 
-    return bucket_df
+# Main logic
+if __name__ == '__main__':
+    all_buckets = get_s3_buckets()
 
+    # Filter for specified bucket if provided
+    if args.bucket:
+        specified_buckets = [bucket for bucket in args.bucket if bucket in all_buckets]
+        if not specified_buckets:
+            print("Specified bucket(s) not found in the account.")
+            exit(1)
+        all_buckets = specified_buckets
 
-def create_s3_report(results_df):
-    # Uses the results_df from identify_public_buckets function and converts them into the CSV report
-    return results_df.to_csv('./output/s3_public_data.csv', index=False)
+    results = identify_public_buckets(all_buckets)
 
-
-# Main block
-all_buckets = get_s3_buckets()
-results_df = identify_public_buckets(all_buckets)
-create_s3_report(results_df)
-print('S3 buckets evaluated successfully. Output file is located at ./output/s3_public_data.csv.')
+    # Generate timestamped filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_filename = f"./output/s3_audit_{timestamp}.txt"
+    save_report(results, output_filename)
+    print("S3 bucket audit completed successfully.")
