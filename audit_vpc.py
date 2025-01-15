@@ -24,7 +24,6 @@ print(args.profile)
 print(args.region)
 ec2 = bc.build_client(args.profile, service, args.region)
 
-
 # Begin defining functions
 def get_vpcs():
     # Gathers IDs of all VPCs in the specified region
@@ -67,7 +66,6 @@ def get_vpcs():
             print('ERROR: Specified VPC does not exist in the current AWS account or Region.')
             exit(1)
 
-
 def gather_subnets(vpc_ids):
     # Gather all subnets from specified VPC(s)
     vpc_subnet_dict = {}
@@ -92,7 +90,6 @@ def gather_subnets(vpc_ids):
 
     return vpc_subnet_dict
 
-
 def eval_auto_assign_public_subnets(subnet):
     # Evaluate discovered subnets for auto-assign public IP setting
     # This is currently called through a loop in a later function, meaning we don't need a permanent assignment for this function
@@ -103,7 +100,6 @@ def eval_auto_assign_public_subnets(subnet):
         auto_public_ip = False
 
     return auto_public_ip
-
 
 def eval_flow_logs(vpc):
     # Evaluates current VPC to determine if flow logs are enabled. If logs are enabled, returns their storage location.
@@ -130,20 +126,50 @@ def eval_flow_logs(vpc):
 
     return flow_log_active, flow_log_dest
 
+def eval_igw(vpc_id):
+    # Evaluates if an Internet Gateway (IGW) is attached to the VPC and if the route tables are configured correctly
+    igw_attached = False
+    route_to_igw = False
+
+    # Check if IGW is attached
+    igws = ec2.describe_internet_gateways(Filters=[
+        {
+            'Name': 'attachment.vpc-id',
+            'Values': [vpc_id]
+        }
+    ])
+    if igws['InternetGateways']:
+        igw_attached = True
+
+    # Check route tables for routes to IGW
+    route_tables = ec2.describe_route_tables(Filters=[
+        {
+            'Name': 'vpc-id',
+            'Values': [vpc_id]
+        }
+    ])
+    for route_table in route_tables['RouteTables']:
+        for route in route_table['Routes']:
+            if route.get('GatewayId') and route['GatewayId'].startswith('igw-'):
+                route_to_igw = True
+                break
+
+    return igw_attached, route_to_igw
 
 def populate_report(vpc_subnet_dict):
     # Perform VPC evaluations and populate them into DF
-    columns = ['VPC ID', 'Flow Logs Active', 'Flow Logs Location', 'Subnet ID', 'Subnet Assigns Public IP']
+    columns = ['VPC ID', 'Flow Logs Active', 'Flow Logs Location', 'Subnet ID', 'Subnet Assigns Public IP', 'IGW Attached', 'Route to IGW']
     vpc_df = pandas.DataFrame(columns=list(columns))
 
     for vpc in vpc_subnet_dict.values():
         # Perform subnet evaluations and populate them into DF
         vpc_id = vpc[0]['VpcId']
         flow_log_active, flow_log_dest = eval_flow_logs(vpc_id)
+        igw_attached, route_to_igw = eval_igw(vpc_id)
 
         # Create dataframe VPC line to be converted into CSV
-        append_series = pandas.Series([vpc_id, flow_log_active, flow_log_dest, '', ''], index=columns)
-        vpc_df = vpc_df.append(append_series, ignore_index=True)
+        append_series = pandas.Series([vpc_id, flow_log_active, flow_log_dest, '', '', igw_attached, route_to_igw], index=columns)
+        vpc_df = pandas.concat([vpc_df, append_series.to_frame().T], ignore_index=True)
 
         for subnet in vpc:
             # Code to evaluate subnet data runs here, then enters data into DF
@@ -151,16 +177,14 @@ def populate_report(vpc_subnet_dict):
             subnet_id = subnet['SubnetId']
 
             # Create dataframe subnet line to be converted into CSV
-            append_series = pandas.Series(['', '', '', subnet_id, auto_public_ip], index=columns)
-            vpc_df = vpc_df.append(append_series, ignore_index=True)
+            append_series = pandas.Series(['', '', '', subnet_id, auto_public_ip, '', ''], index=columns)
+            vpc_df = pandas.concat([vpc_df, append_series.to_frame().T], ignore_index=True)
 
     return vpc_df
-
 
 def create_vpc_report(results_df):
     # Uses the results_df from function and converts them into the CSV report
     return results_df.to_csv('./output/vpc_audit_data.csv', index=False)
-
 
 # Main block
 vpc_ids = get_vpcs()
