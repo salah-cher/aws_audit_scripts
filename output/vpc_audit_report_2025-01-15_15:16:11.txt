@@ -1,0 +1,13 @@
+VPC ID: vpc-05ce4842fec936ebc
+  Flow Logs Active: INACTIVE
+  Flow Logs Location: N/A
+  IGW Attached: True
+  Route to IGW: True
+  Subnet ID: subnet-02cba03e1afa75301
+      Subnet Assigns Public IP: False
+      Subnet Type: Private
+      Route Table Associated: True
+  Subnet ID: subnet-091396644b683ab52
+      Subnet Assigns Public IP: False
+      Subnet Type: Public
+      Route Table Associated: True
