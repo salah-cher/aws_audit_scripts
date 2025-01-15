@@ -48,41 +48,39 @@ DescribeDBInstances
 Execute `python audit_rds.py` from the cloned directory. Adding the `-h` argument will give help details.
 
 ### audit_vpc.py
-This script validates multiple security settings in your VPCs, including -  
-- Whether VPCs are collecting flow logs, and if so, where the flow logs are being output
-- Whether subnets automatically assign public IPs to instances launched in them
-- More to come (this is admittedly the least useful of the three scripts)
 
-Once the validation is complete, a CSV file is created in the `output` folder that outlines findings.
+This script audits your AWS VPC configurations, including flow logs, Internet Gateway (IGW), subnets, and route tables. It generates both text and HTML reports with detailed information about your VPCs.
 
-Currently, the script only checks VPC settings of one account. All VPCs of the account are checked unless the `-v` argument is used to specify a VPC. At the moment, only one VPC can be specified.
+## Features
 
-The script assumes that your configured IAM user has the correct IAM permissions to access VPC and subnet info. The required actions are listed below, and a full list of actions can be found here: https://docs.aws.amazon.com/IAM/latest/UserGuide/list_amazonec2.html
+- Checks if subnets auto-assign public IPs
+- Evaluates if flow logs are enabled for VPCs
+- Verifies if an Internet Gateway (IGW) is attached to the VPC and if the route tables are configured correctly
+- Includes the type of subnets (public or private) in the report
+- Verifies that each subnet has an associated route table
+- Checks that the route table for public subnets has a route to the internet gateway (0.0.0.0/0)
+- Ensures that the route table for private subnets has a route to the NAT gateway for outbound internet access
+- Generates both text and HTML reports with timestamps
 
-Required actions/ permissions:
-DescribeSubnets
-DescribeVpcs
+## Usage
 
-#### Usage
-Execute `python audit_vpc.py` from the cloned directory, including required `-r` argument. Adding the `-h` argument will give help details.
+1. Run the script:
+    ```bash
+    python audit_vpc.py -r <region> -p <profile> -v <vpc_id>
+    ```
 
+    - `-r` or `--region`: The region to evaluate VPC resources for. If not set, uses the default region specified in your profile.
+    - `-p` or `--profile`: AWS credential profile to run the script under. Automatically uses "default" if no profile is specified.
+    - `-v` or `--vpc`: The ID of the single VPC to evaluate. If no VPC is specified, automatically evaluates all VPCs in the account.
 
-#### To Do's
-All scripts:
-- Add AWS config/ credentials detection
-- Add arguments to support matching tags
-- Add error checking for invalid IAM permissions for the configured user access key
-- Enable passing in more than one argument to argparse
+2. The script will generate both text and HTML reports in the `./output` directory with timestamps.
 
-audit_s3.py: 
-- Evaluate ACLs of individual objects/ object versions
-- Ensure get_bucket_acl function's loop can correctly handle evaluation of more than one ACL result
+## Example
 
-audit_rds.py:
-- Add error checking for making sure specified instance exists (if -i arg is used)
-- Add support for checking RDS instance ID or ARN instead of friendly name
-- Add more info about available snapshots, logging, etc. 
+```bash
+python audit_vpc.py -r us-east-1 -p default -v vpc-12345678
+```
+This will generate the following files in the ./output directory:
 
-audit_vpc.py:
-- Add support for VPC name instead of ID
-- Add more checks, such as checking for VPC flow logs, non-default NACL rules are in place, etc.
+vpc_audit_report_<timestamp>.txt
+vpc_audit_report_<timestamp>.html
