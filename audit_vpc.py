@@ -2,6 +2,7 @@ import argparse
 import pandas as pd
 import boto3
 from botocore.exceptions import ClientError
+from datetime import datetime
 
 # Create argparse object and arguments
 parser = argparse.ArgumentParser(description='Check for VPC configurations in your AWS account.')
@@ -197,10 +198,12 @@ def populate_report(vpc_subnet_dict):
     return "\n".join(report_lines)
 
 def create_vpc_report(report_content):
-    with open('./output/vpc_audit_report.txt', 'w') as f:
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
+    with open(f'./output/vpc_audit_report_{timestamp}.txt', 'w') as f:
         f.write(report_content)
 
 def create_vpc_html_report(report_content):
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
     html_content = f"""
     <html>
     <head>
@@ -213,11 +216,12 @@ def create_vpc_html_report(report_content):
     </head>
     <body>
         <h1>VPC Audit Report</h1>
+        <p>Generated on: {timestamp}</p>
         <pre>{report_content}</pre>
     </body>
     </html>
     """
-    with open('./output/vpc_audit_report.html', 'w') as f:
+    with open(f'./output/vpc_audit_report_{timestamp}.html', 'w') as f:
         f.write(html_content)
 
 # Main block
@@ -226,4 +230,4 @@ vpc_subnet_dict = gather_subnets(vpc_ids)
 report_content = populate_report(vpc_subnet_dict)
 create_vpc_report(report_content)
 create_vpc_html_report(report_content)
-print('VPC(s) evaluated successfully. Output files are located at ./output/vpc_audit_report.txt and ./output/vpc_audit_report.html.')
+print('VPC(s) evaluated successfully. Output files are located in the ./output directory with timestamps.')
