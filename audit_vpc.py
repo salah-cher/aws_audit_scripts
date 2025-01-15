@@ -1,7 +1,6 @@
-# Import required libraries
 import argparse
-import pandas
-import modules.build_client as bc
+import pandas as pd
+import boto3
 from botocore.exceptions import ClientError
 
 # Create argparse object and arguments
@@ -19,10 +18,8 @@ parser.add_argument('-v', '--vpc', action='append',
 args = parser.parse_args()
 
 # Create required EC2 client to gather VPC data, specifying region
-service = 'ec2'
-print(args.profile)
-print(args.region)
-ec2 = bc.build_client(args.profile, service, args.region)
+session = boto3.Session(profile_name=args.profile, region_name=args.region)
+ec2 = session.client('ec2')
 
 # Begin defining functions
 def get_vpcs():
@@ -157,38 +154,56 @@ def eval_igw(vpc_id):
     return igw_attached, route_to_igw
 
 def populate_report(vpc_subnet_dict):
-    # Perform VPC evaluations and populate them into DF
-    columns = ['VPC ID', 'Flow Logs Active', 'Flow Logs Location', 'Subnet ID', 'Subnet Assigns Public IP', 'IGW Attached', 'Route to IGW']
-    vpc_df = pandas.DataFrame(columns=list(columns))
+    report_lines = []
 
     for vpc in vpc_subnet_dict.values():
-        # Perform subnet evaluations and populate them into DF
         vpc_id = vpc[0]['VpcId']
         flow_log_active, flow_log_dest = eval_flow_logs(vpc_id)
         igw_attached, route_to_igw = eval_igw(vpc_id)
 
-        # Create dataframe VPC line to be converted into CSV
-        append_series = pandas.Series([vpc_id, flow_log_active, flow_log_dest, '', '', igw_attached, route_to_igw], index=columns)
-        vpc_df = pandas.concat([vpc_df, append_series.to_frame().T], ignore_index=True)
+        report_lines.append(f"VPC ID: {vpc_id}")
+        report_lines.append(f"  Flow Logs Active: {flow_log_active}")
+        report_lines.append(f"  Flow Logs Location: {flow_log_dest}")
+        report_lines.append(f"  IGW Attached: {igw_attached}")
+        report_lines.append(f"  Route to IGW: {route_to_igw}")
 
         for subnet in vpc:
-            # Code to evaluate subnet data runs here, then enters data into DF
             auto_public_ip = eval_auto_assign_public_subnets(subnet)
             subnet_id = subnet['SubnetId']
 
-            # Create dataframe subnet line to be converted into CSV
-            append_series = pandas.Series(['', '', '', subnet_id, auto_public_ip, '', ''], index=columns)
-            vpc_df = pandas.concat([vpc_df, append_series.to_frame().T], ignore_index=True)
+            report_lines.append(f"  Subnet ID: {subnet_id}")
+            report_lines.append(f"      Subnet Assigns Public IP: {auto_public_ip}")
 
-    return vpc_df
+    return "\n".join(report_lines)
 
-def create_vpc_report(results_df):
-    # Uses the results_df from function and converts them into the CSV report
-    return results_df.to_csv('./output/vpc_audit_data.csv', index=False)
+def create_vpc_report(report_content):
+    with open('./output/vpc_audit_report.txt', 'w') as f:
+        f.write(report_content)
+
+def create_vpc_html_report(report_content):
+    html_content = f"""
+    <html>
+    <head>
+        <title>VPC Audit Report</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; }}
+            .vpc {{ margin-bottom: 20px; }}
+            .subnet {{ margin-left: 20px; }}
+        </style>
+    </head>
+    <body>
+        <h1>VPC Audit Report</h1>
+        <pre>{report_content}</pre>
+    </body>
+    </html>
+    """
+    with open('./output/vpc_audit_report.html', 'w') as f:
+        f.write(html_content)
 
 # Main block
 vpc_ids = get_vpcs()
 vpc_subnet_dict = gather_subnets(vpc_ids)
-results_df = populate_report(vpc_subnet_dict)
-create_vpc_report(results_df)
-print('VPC(s) evaluated successfully. Output file is located at ./output/vpc_audit_data.csv.')
+report_content = populate_report(vpc_subnet_dict)
+create_vpc_report(report_content)
+create_vpc_html_report(report_content)
+print('VPC(s) evaluated successfully. Output files are located at ./output/vpc_audit_report.txt and ./output/vpc_audit_report.html.')
