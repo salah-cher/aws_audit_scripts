@@ -1,44 +1,35 @@
 import boto3
 from botocore.exceptions import ProfileNotFound, NoCredentialsError, NoRegionError
 
+def build_client(profile, service, region=None):
+    """
+    Builds a Boto3 client to connect to AWS based on the provided profile, service, and region.
+    If no region is specified, it uses the default region from the profile configuration.
+    """
+    try:
+        # Initialize a session using the specified profile
+        session = boto3.Session(profile_name=profile)
 
-def build_client(profile, service, region):
-    # Builds Boto3 client to connect to AWS based on how profile is set up, and what cmd line arguments are passed
-    if region == None:
-        try:
-            if profile == 'default':
-                session = boto3.session.Session(profile_name='default')
-                client = session.client(str(service))
-                return client
-            else:
-                session = boto3.session.Session(profile_name=str(profile))
-                client = session.client(str(service))
-                return client
-        except ProfileNotFound:
-            print(
-                "Error: Profile Not Found. Please check your typing and ensure the profile is located in your ~/.aws folder.")
-            exit(1)
-        except NoCredentialsError:
-            print("Error: Credentials Not Found. Please ensure your ~/.aws/credentials file is set up correctly.")
-            exit(2)
-        except NoRegionError:
-            print("Error: No Region Found. Please ensure the selected (or default) profile has a region specified.")
-            exit(3)
+        # If region is not specified, use the session's default region
+        if region is None:
+            region = session.region_name
+            if region is None:
+                raise NoRegionError
 
-    elif region != None:
-        try:
-            if profile == 'default':
-                session = boto3.session.Session(profile_name='default', region_name=region)
-                client = session.client(str(service))
-                return client
-            elif profile is type(str):
-                session = boto3.session.Session(profile_name=str(profile), region_name=region)
-                client = session.client(str(service))
-                return client
-        except ProfileNotFound:
-            print(
-                "Error: Profile Not Found. Please check your typing and ensure the profile is located in your ~/.aws folder.")
-            exit(1)
-        except NoCredentialsError:
-            print("Error: Credentials Not Found. Please ensure your ~/.aws/credentials file is set up correctly.")
-            exit(2)
+        # Create the client for the specified service and region
+        client = session.client(service_name=service, region_name=region)
+        return client
+
+    except ProfileNotFound:
+        print(f"Error: The AWS profile '{profile}' was not found. Please check your AWS configuration.")
+        exit(1)
+    except NoCredentialsError:
+        print("Error: AWS credentials not found. Ensure your ~/.aws/credentials file is set up correctly.")
+        exit(2)
+    except NoRegionError:
+        print("Error: No region specified. Please provide a region or configure a default region in your AWS profile.")
+        exit(3)
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        exit(4)
+
