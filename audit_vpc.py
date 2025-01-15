@@ -206,6 +206,24 @@ def eval_public_subnet_route_to_igw(subnet):
     
     return False
 
+def eval_private_subnet_route_to_nat(subnet):
+    # Evaluates if a private subnet's route table has a route to the NAT gateway (0.0.0.0/0)
+    subnet_id = subnet['SubnetId']
+    
+    route_tables = ec2.describe_route_tables(Filters=[
+        {
+            'Name': 'association.subnet-id',
+            'Values': [subnet_id]
+        }
+    ])
+    
+    for route_table in route_tables['RouteTables']:
+        for route in route_table['Routes']:
+            if route.get('DestinationCidrBlock') == '0.0.0.0/0' and route.get('NatGatewayId'):
+                return True
+    
+    return False
+
 def populate_report(vpc_subnet_dict):
     report_lines = []
 
@@ -226,12 +244,14 @@ def populate_report(vpc_subnet_dict):
             subnet_type = eval_subnet_type(subnet)
             route_table_association = eval_subnet_route_table_association(subnet)
             route_to_igw = eval_public_subnet_route_to_igw(subnet) if subnet_type == "Public" else "N/A"
+            route_to_nat = eval_private_subnet_route_to_nat(subnet) if subnet_type == "Private" else "N/A"
 
             report_lines.append(f"  Subnet ID: {subnet_id}")
             report_lines.append(f"      Subnet Assigns Public IP: {auto_public_ip}")
             report_lines.append(f"      Subnet Type: {subnet_type}")
             report_lines.append(f"      Route Table Associated: {route_table_association}")
             report_lines.append(f"      Route to IGW (0.0.0.0/0): {route_to_igw}")
+            report_lines.append(f"      Route to NAT Gateway (0.0.0.0/0): {route_to_nat}")
 
     return "\n".join(report_lines)
 
