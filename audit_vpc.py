@@ -257,11 +257,15 @@ def populate_report(vpc_subnet_dict):
 
 def create_vpc_report(report_content):
     timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
-    with open(f'./output/vpc_audit_report_{timestamp}.txt', 'w') as f:
-        f.write(report_content)
+    file_path = f'./output/vpc_audit_report_{timestamp}.txt'
+    with open(file_path, 'w') as f:
+         f.write(report_content)
+    print(f'Text report generated: {file_path}')
+
 
 def create_vpc_html_report(report_content):
     timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
+    file_path = f'./output/vpc_audit_report_{timestamp}.html'
     html_content = f"""
     <html>
     <head>
@@ -279,8 +283,11 @@ def create_vpc_html_report(report_content):
     </body>
     </html>
     """
-    with open(f'./output/vpc_audit_report_{timestamp}.html', 'w') as f:
+    with open(file_path, 'w') as f:
         f.write(html_content)
+    print(f'HTML report generated: {file_path}')
+
+
 
 # Main block
 vpc_ids = get_vpcs()
