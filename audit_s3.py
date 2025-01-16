@@ -175,7 +175,7 @@ def get_cors_configuration(bucket):
             return "Not Configured"
         handle_client_error(error)
 
-def check_mfa_delete(bucket_name):
+def check_mfa_delete(bucket):
     """
     Checks if MFA Delete is enabled for the specified bucket.
     
@@ -186,7 +186,7 @@ def check_mfa_delete(bucket_name):
         str: "Enabled" if MFA Delete is active, otherwise "Disabled".
     """
     try:
-        response = s3.get_bucket_versioning(Bucket=bucket_name)
+        response = s3.get_bucket_versioning(Bucket=bucket)
         mfa_status = response.get('MFADelete', 'Disabled')
         return mfa_status
     except ClientError as e:
@@ -219,7 +219,7 @@ def identify_public_buckets(all_buckets):
         result_output.append(f"Lifecycle Policies: {lifecycle}")
         result_output.append(f"Website Hosting: {website}")
         result_output.append(f"CORS Configuration: {cors}")
-        result_output.append(f"CORS Configuration: {mfa_delete_status}")
+        result_output.append(f"MFA Delete Status: {mfa_delete_status}")
         result_output.append("-" * 60)
 
     return "\n".join(result_output)
