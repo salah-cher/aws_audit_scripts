@@ -210,3 +210,49 @@ def check_object_lock(bucket):
             return "Access Denied"
         else:
             return f"Error: {e.response['Error']['Message']}"
+
+def check_public_objects(bucket):
+    """
+    Checks if any objects in the bucket are publicly accessible.
+
+    Args:
+        bucket (str): Name of the S3 bucket.
+
+    Returns:
+        str: "No public objects" if all objects are private,
+             "Public objects detected" if one or more objects are public,
+             or an error message if an issue occurs.
+    """
+    s3 = boto3.client('s3')
+
+    try:
+        # List objects in the bucket
+        response = s3.list_objects_v2(Bucket=bucket)
+        if 'Contents' not in response:
+            return "No objects in bucket"
+
+        for obj in response['Contents']:
+            object_key = obj['Key']
+
+            # Get object ACL
+            acl_response = s3.get_object_acl(Bucket=bucket, Key=object_key)
+            for grant in acl_response.get('Grants', []):
+                grantee = grant.get('Grantee', {})
+                permission = grant.get('Permission', '')
+
+                # Check for public access
+                if grantee.get('Type') == 'Group' and \
+                   grantee.get('URI') == 'http://acs.amazonaws.com/groups/global/AllUsers' and \
+                   permission in ['READ', 'FULL_CONTROL']:
+                    return "Public objects detected"
+
+        return "No public objects"
+
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'AccessDenied':
+            return "Access Denied"
+        else:
+            return f"Error: {e.response['Error']['Message']}"
+
+
+

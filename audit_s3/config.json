@@ -9,5 +9,6 @@
     "get_website_configuration": "Website Configuration",
     "get_cors_configuration": "CORS Configuration",
     "check_object_lock": "Object Lock",
+    "check_public_objects": "Object are publicly accessible",
     "check_mfa_delete": "MFA Delete"
 }
