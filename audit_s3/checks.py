@@ -182,3 +182,31 @@ def check_mfa_delete(bucket):
         return mfa_status
     except ClientError as e:
         return f"Error checking MFA Delete: {e.response['Error']['Message']}"
+
+def check_object_lock(bucket):
+    """
+    Checks if Object Lock is enabled for an S3 bucket.
+    
+    Args:
+        bucket (str): Name of the S3 bucket.
+
+    Returns:
+        str: "Enabled" if Object Lock is active, "Not Configured" otherwise.
+    """
+    s3 = boto3.client('s3')
+
+    try:
+        response = s3.get_object_lock_configuration(Bucket=bucket)
+        lock_config = response.get('ObjectLockConfiguration', {})
+        
+        if lock_config.get('ObjectLockEnabled') == 'Enabled':
+            return "Enabled"
+        else:
+            return "Not Configured"
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'ObjectLockConfigurationNotFoundError':
+            return "Not Configured"
+        elif e.response['Error']['Code'] == 'AccessDenied':
+            return "Access Denied"
+        else:
+            return f"Error: {e.response['Error']['Message']}"
