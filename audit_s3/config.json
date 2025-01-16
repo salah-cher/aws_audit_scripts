@@ -1,0 +1,12 @@
+{
+    "get_block_public_access_rules": "Public Block Enabled",
+    "get_bucket_policy": "Bucket Policy",
+    "get_bucket_acl": "Bucket ACL Public",
+    "get_s3_bucket_encryption": "Bucket Encryption",
+    "get_versioning": "Versioning",
+    "get_logging": "Logging",
+    "get_lifecycle": "Lifecycle",
+    "get_website_configuration": "Website Configuration",
+    "get_cors_configuration": "CORS Configuration",
+    "check_mfa_delete": "MFA Delete"
+}

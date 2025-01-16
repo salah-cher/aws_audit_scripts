@@ -1,0 +1,11 @@
+Bucket Name: MyB1
+  Public Block Enabled: Not Configured
+  Bucket Policy: No bucket policy
+  Bucket ACL Public: Private
+  Bucket Encryption: Enabled
+  Versioning: Not Enabled
+  Logging: Enabled
+  Lifecycle: Not Configured
+  Website Configuration: Not Enabled
+  CORS Configuration: Not Configured
+  MFA Delete: Disabled
